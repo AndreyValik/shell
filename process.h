@@ -9,5 +9,8 @@ pid_list check_background_processes(pid_list list);
 /*Запустить процесс, если фоновый, то добавляет в список фоновых процессов*/
 pid_list run_process(str_list strings, pid_list pids);
 
+/*Завершить все фоновые процессы*/
+void kill_background_processes(pid_list pids);
+
 
 #endif /*_PROCESS_H_*/

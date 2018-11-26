@@ -13,21 +13,22 @@
 
 int main()
 {
-	pid_list fnlis = NULL;
-	str_list L = NULL;
+	pid_list background_processes = NULL;
+	str_list cmd = NULL;
 
-	while( ( L = input_cmd() ) != NULL )
+	while( ( cmd = input_cmd() ) != NULL )//если NULL - значит получили EOF
 	{
 		/*Запуск процесса*/
-		fnlis = run_process( L, fnlis );
+		if( !is_empty_cmd( cmd ) )
+			background_processes = run_process( cmd, background_processes );
 
-		str_free( L );
+		str_free( cmd );
 
 		/*проверим фоновые процессы*/
-		fnlis = check_background_processes( fnlis );
+		background_processes = check_background_processes( background_processes );
 	}
 
-	while( (fnlis = check_background_processes( fnlis )) != NULL );
+	kill_background_processes( background_processes );
 
 	return 0;
 }

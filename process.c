@@ -1,9 +1,14 @@
+//for kill()
+#define _POSIX_SOURCE
+
 #include <stdio.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "process.h"
 
@@ -14,7 +19,7 @@ int check_cd(str_list strings)
 	if( strings == NULL )
 		return 0;
 
-	if( strcmp( strings->str, "cd") != 0 )
+	if( strcmp( strings->str, "cd" ) != 0 )
 		return 0;
 
 	if( strings->next != NULL )
@@ -59,7 +64,7 @@ pid_list run_process(str_list strings, pid_list pids)
 	int background = 0;
 	pid_t pid;
 
-	if( check_cd(strings) )
+	if( check_cd( strings ) )
 		return pids;
 
 	args = malloc( ( nargs + 1 ) * sizeof( nargs ) );
@@ -118,4 +123,24 @@ pid_list run_process(str_list strings, pid_list pids)
 	free( args );
 
 	return pids;
+}
+
+void kill_background_processes(pid_list pids)
+{
+	pid_list iter = check_background_processes( pids ); //проверим вдруг ктото уже завершился
+
+	//остальных прибъем сигналом SIGKILL
+	while( iter )
+	{
+		if( kill( iter->pid, SIGKILL ) != 0 )
+			fprintf( stderr, "Can't kill process pid=%d: %s!\n", iter->pid, strerror( errno ) );
+	}
+
+	//проверим что все убитые завершились
+	pids = check_background_processes( pids );
+	if( pids )
+	{
+		fprintf( stderr, "Can't reminate all process!\n" );
+		pid_free( pids ); //освободим память неубитых
+	}
 }
