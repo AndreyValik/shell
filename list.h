@@ -34,4 +34,10 @@ str_list str_add(str_list list, const char* str);
 /*Удаляет весь список, рекурсия*/
 void str_free(str_list list);
 
+/*Получить размер списка*/
+int str_size(str_list list);
+
+/*Получить размер списка*/
+int pid_size(pid_list list);
+
 #endif /*_LIST_H_*/

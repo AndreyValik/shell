@@ -17,10 +17,10 @@ TARGET = shell
 all: $(TARGET)
 
 #Переменная содержащая список файлов с исходными текстами
-SOURCES = newstage2.c list.c process.c
+SOURCES = newstage2.c list.c process.c input.c
 
 #Переменная содержащая список заголовочных файлов
-HEADERS =  list.h process.h
+HEADERS =  list.h process.h input.h
 
 #Собственно сборка бинарника shell
 #Зависит от исходников и заголовочных файлов, дальше указывается как собрать, строка сборки обязательно должна начинаться с табуляции

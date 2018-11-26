@@ -96,3 +96,28 @@ void str_free(str_list list)
 	free( list );
 }
 
+int str_size(str_list list)
+{
+	int size = 0;
+
+	while( list != NULL )
+	{
+		size++;
+		list = list->next;
+	}
+
+	return size;
+}
+
+int pid_size(pid_list list)
+{
+	int size = 0;
+
+	while( list != NULL )
+	{
+		size++;
+		list = list->next;
+	}
+
+	return size;
+}
