@@ -250,21 +250,21 @@ shell make_shell(str_list L)
 		if (strcmp(L->str, ">") == 0)
 		{
 			str_size = strlen(L->next->str) + 1;
-			curr_cmd->output = malloc(str_size);
+			curr_cmd->output = malloc(sizeof(char) * str_size);
 			memcpy(curr_cmd->output, L->next->str, str_size);
 			L = L->next->next;
 		}
 		else if (strcmp(L->str, "<") == 0)
 		{
 			str_size = strlen(L->next->str) + 1;
-			curr_cmd->output = malloc(str_size);
+			curr_cmd->input = malloc(str_size);
 			memcpy(curr_cmd->input, L->next->str, str_size);
 			L = L->next->next;
 		}
 		else if (strcmp(L->str, ">>") == 0)
 		{
 			str_size = strlen(L->next->str) + 1;
-			curr_cmd->output = malloc(str_size);
+			curr_cmd->output_add = malloc(str_size);
 			memcpy(curr_cmd->output_add, L->next->str, str_size);
 			L = L->next->next;
 		}
@@ -279,6 +279,7 @@ shell make_shell(str_list L)
 			Sh_next = calloc(1, sizeof(struct one_command));
 			curr_cmd->next_command = Sh_next;
 			curr_cmd = curr_cmd->next_command;
+			L = L->next;
 		}
 		else
 		{
@@ -308,8 +309,21 @@ void print_shell(shell Sh)
 		Sh = Sh->next_command;
 	}
 	Sh = Sh_start;
+	shell_free(Sh_start);
 }
 
+/*счаитаем количество команд конвейера*/
+int comand_count(shell Sh)
+{
+	shell Sh_start;
+	int count = 0;
+	while (Sh != NULL)
+	{
+		count++;
+		Sh = Sh->next_command;
+	}
+	return count;
+}
 int check_cd(str_list strings)
 {
 	char* dir; //Домашний каталог по умолчанию, если cd без аргументов
@@ -357,7 +371,7 @@ pid_list check_background_processes(pid_list list)
 	return list;
 }
 
-/*выполнение команды*/
+/*выполнение команды старое
 pid_list run_process(str_list strings, pid_list pids)
 {
 	char** args;
@@ -424,7 +438,75 @@ pid_list run_process(str_list strings, pid_list pids)
 	free(args);
 
 	return pids;
+}*/
+
+/*выполнение команды новое*/
+pid_list run_process(shell Sh, pid_list pids)
+{
+	char** args;
+	int nargs = str_size(Sh->comand);
+	int background = 0;
+	pid_t pid;
+
+	if (check_cd(Sh->comand))
+		return pids;
+
+	args = malloc((nargs + 1) * sizeof(char*));
+	nargs = 0;
+	while (Sh->comand != NULL)
+	{
+		args[nargs] = Sh->comand->str;
+		nargs++;
+		Sh->comand = Sh->comand->next;
+	}
+
+	if (Sh->fn)
+		background = 1;
+
+
+	args[nargs] = NULL;
+
+	pid = fork();
+	if (!pid)
+	{
+
+		execvp(args[0], args);
+		fprintf( stderr, "Error executing %s: %s\n", args[0], strerror( errno));
+		exit(1);
+	}
+
+	if (background)
+	{
+		pids = pid_add(pids, pid);
+		printf("running the background process with PID=%d\n", pid);
+	}
+	else
+	{
+		int status;
+		pid_t ret;
+
+		while ((ret = waitpid(pid, &status, 0)) >= 0)
+		{
+			if (ret != pid)
+				continue;
+
+			if (WIFEXITED(status))
+			{
+				break;
+			}
+			else if (WIFSIGNALED(status))
+			{
+				printf("process with terminated by signal %d\n", WTERMSIG(status));
+				break;
+			}
+		}
+	}
+
+	free(args);
+
+	return pids;
 }
+
 
 /*прибить фоновые процессы*/
 void kill_background_processes(pid_list pids)
@@ -445,6 +527,73 @@ void kill_background_processes(pid_list pids)
 		usleep(10000);
 }
 
+#define READ_END 0
+#define WRITE_END 1
+
+/*конвейер*/
+pid_list conv(shell Sh, pid_list background_pids)
+{
+	int count = comand_count(Sh);
+	int fd[4];
+	int *pred = fd;
+	int *next = &fd[2];
+	pid_t pid;
+
+	if (count == 1)
+	{
+		return run_process(Sh, background_pids);
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		pipe(next);
+		printf("fork process %d\n", i);
+		pid = fork();
+		if (!pid)
+		{
+			printf("run process %d\n", i);
+#if 1
+			if( i != 0 )
+			{
+				dup2( pred[READ_END], STDIN_FILENO );
+				close(pred[WRITE_END]);
+				pred[WRITE_END] = -1;
+			}
+
+			close(next[READ_END]);
+
+			if (i == count - 1)
+			{
+				close(next[WRITE_END]);
+				next[WRITE_END] = -1;
+			} else
+			{
+				dup2( next[WRITE_END], STDOUT_FILENO );
+			}
+#endif
+			run_process(Sh, background_pids);
+			exit(0);
+		}
+		else if (i != 0)
+		{
+			close(pred[READ_END]);
+			pred[READ_END] = -1;
+		}
+		close(next[WRITE_END]);
+		next[WRITE_END] = -1;
+
+		int *tmp = pred;
+		pred = next;
+		next = tmp;
+		Sh = Sh->next_command;
+	}
+	for (int i = 1; i < count; i++)
+	{
+		wait(NULL);
+	}
+	return background_pids;
+}
+
 int main()
 {
 	shell Sh = NULL;
@@ -463,15 +612,20 @@ int main()
 		strcat(str, tmp_str);
 		if (tmp_str[len - 1] == '\n')
 		{
+			background_pids = check_background_processes(background_pids);
 			if (make_arguments(&arguments, str) == 0)
 			{
 				free(str);
 				str = (char*) calloc(1, sizeof(char));
 				if (arguments != NULL)
+				{
 					Sh = make_shell(arguments);
-				//print_shell(Sh);
-				//str_free(arguments);
-				//shell_free(Sh);
+					background_pids = conv(Sh, background_pids);
+					//print_shell(Sh);
+					str_free(arguments);
+					arguments = NULL;
+					//shell_free(Sh);
+				}
 			}
 		}
 	}
@@ -492,9 +646,9 @@ int main()
 
 	 free(s);
 
-	 str_free(arguments);
+	 str_free(arguments);*/
 
-	 kill_background_processes(background_pids);*/
+	 kill_background_processes(background_pids);
 
 	return 0;
 }
